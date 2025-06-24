@@ -14,7 +14,7 @@ export default function Home() {
   };
 
   return (
-    <div className="grid grid-cols-2 gap-4 w-full max-w-4xl h-full py-32">
+    <div className="grid grid-cols-2 gap-4 w-full max-w-4xl h-full py-32 overflow-hidden">
       <DirectoryBrowser onSelectionChange={handleSelectionChange} />
       <SelectedList included={included} excluded={excluded} />
     </div>

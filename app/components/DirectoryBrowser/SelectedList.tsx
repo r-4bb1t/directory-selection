@@ -6,7 +6,7 @@ export default function SelectedList({
   excluded: { id: ID; name: string; ancestors: { id: ID; name: string }[] }[];
 }) {
   return (
-    <div className="flex flex-col w-full max-w-xl h-full">
+    <div className="flex flex-col w-full max-w-xl h-full min-h-0">
       <div className="mt-4 w-full flex flex-col gap-2 h-full p-4 bg-success/5 rounded overflow-hidden">
         <h3 className="font-semibold mb-2">포함된 항목들</h3>
         <div className="flex flex-col gap-2 overflow-y-auto h-full shrink">
