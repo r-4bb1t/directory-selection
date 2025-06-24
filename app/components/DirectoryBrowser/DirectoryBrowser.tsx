@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import { ParentDirectoryButton } from "./ParentDirectoryButton";
 import { DirectoryList } from "./DirectoryList";
 import { Skeleton } from "./Skeleton";
 import { useDirectorySelection } from "./useDirectorySelection";
@@ -38,8 +37,6 @@ export const DirectoryBrowser = ({ onSelectionChange }: DirectoryBrowserProps) =
 
   return (
     <div className="flex flex-col gap-2 w-full max-w-xl p-4 rounded">
-      <ParentDirectoryButton dir={dir} isLoading={isLoading} onNavigate={handleNavigate} />
-
       {isLoading ? (
         <Skeleton num={10} />
       ) : (
