@@ -4,65 +4,81 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
   const [included, setIncluded] = useState<SelectedDir[]>([]);
   const [excluded, setExcluded] = useState<SelectedDir[]>([]);
 
+  const isItemInList = (itemId: ID, list: SelectedDir[]) => list.some((item) => item.id === itemId);
+
+  const hasChildrenInList = (parentId: ID, list: SelectedDir[]) =>
+    list.some((item) => item.ancestors.some((ancestor) => ancestor.id === parentId));
+
+  const getCurrentAncestorPath = () => (dir ? [...(dir.ancestors || []), { id: dir.id, name: dir.name }] : []);
+
+  const findEffectiveParentState = (childId: ID): "include" | "exclude" | "none" => {
+    const ancestorPath = getCurrentAncestorPath();
+
+    for (let i = ancestorPath.length - 1; i >= 0; i--) {
+      const ancestor = ancestorPath[i];
+      if (isItemInList(ancestor.id, excluded)) return "exclude";
+      if (isItemInList(ancestor.id, included)) return "include";
+    }
+
+    return "none";
+  };
+
+  const calculateDirectState = (child: { id: ID; name: string }) => {
+    const isIncluded = isItemInList(child.id, included);
+    const isExcluded = isItemInList(child.id, excluded);
+    const hasIncludedChildren = hasChildrenInList(child.id, included);
+    const hasExcludedChildren = hasChildrenInList(child.id, excluded);
+
+    if (isIncluded) {
+      return {
+        checked: true,
+        indeterminate: hasExcludedChildren,
+      };
+    }
+
+    if (isExcluded) {
+      return { checked: false, indeterminate: false };
+    }
+
+    if (hasIncludedChildren) {
+      return { checked: false, indeterminate: true };
+    }
+
+    return null;
+  };
+
+  const calculateInheritedState = (child: { id: ID; name: string }) => {
+    const effectiveState = findEffectiveParentState(child.id);
+    const hasExcludedChildren = hasChildrenInList(child.id, excluded);
+
+    switch (effectiveState) {
+      case "exclude":
+        return { checked: false, indeterminate: false };
+      case "include":
+        return {
+          checked: true,
+          indeterminate: hasExcludedChildren,
+        };
+      default:
+        return { checked: false, indeterminate: false };
+    }
+  };
+
   const getCheckboxState = useMemo(() => {
     return (child: { id: ID; name: string }) => {
-      const isIncluded = included.some((item) => item.id === child.id);
-      const isExcluded = excluded.some((item) => item.id === child.id);
+      const directState = calculateDirectState(child);
+      if (directState) return directState;
 
-      const hasIncludedChildren = included.some((item) => item.ancestors.some((ancestor) => ancestor.id === child.id));
-      const hasExcludedChildren = excluded.some((item) => item.ancestors.some((ancestor) => ancestor.id === child.id));
-
-      if (isIncluded) {
-        if (hasExcludedChildren) {
-          return { checked: true, indeterminate: true };
-        }
-        return { checked: true, indeterminate: false };
-      }
-
-      if (isExcluded) {
-        return { checked: false, indeterminate: false };
-      }
-
-      if (hasIncludedChildren) {
-        return { checked: false, indeterminate: true };
-      }
-
-      const childAncestorPath = [...(dir?.ancestors || []), { id: dir?.id, name: dir?.name || "" }];
-
-      let effectiveState: "include" | "exclude" | "none" = "none";
-
-      for (let i = childAncestorPath.length - 1; i >= 0; i--) {
-        const ancestor = childAncestorPath[i];
-        if (excluded.some((item) => item.id === ancestor.id)) {
-          effectiveState = "exclude";
-          break;
-        }
-        if (included.some((item) => item.id === ancestor.id)) {
-          effectiveState = "include";
-          break;
-        }
-      }
-
-      if (effectiveState === "exclude") {
-        return { checked: false, indeterminate: false };
-      } else if (effectiveState === "include") {
-        if (hasExcludedChildren) {
-          return { checked: true, indeterminate: true };
-        }
-        return { checked: true, indeterminate: false };
-      }
-
-      return { checked: false, indeterminate: false };
+      return calculateInheritedState(child);
     };
   }, [included, excluded, dir]);
 
   const getParentIndeterminateState = useMemo(() => {
-    if (!dir) return { checked: false, indeterminate: false };
+    if (!dir?.children?.length) {
+      return { checked: false, indeterminate: false };
+    }
 
-    const childStates = dir.children.map((child) => {
-      const state = getCheckboxState(child);
-      return { checked: state.checked, indeterminate: state.indeterminate };
-    });
+    const childStates = dir.children.map((child) => getCheckboxState(child));
 
     const checkedCount = childStates.filter((state) => state.checked && !state.indeterminate).length;
     const indeterminateCount = childStates.filter((state) => state.indeterminate).length;
@@ -70,48 +86,84 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
 
     if (checkedCount === 0 && indeterminateCount === 0) {
       return { checked: false, indeterminate: false };
-    } else if (checkedCount === totalCount && indeterminateCount === 0) {
-      return { checked: true, indeterminate: false };
-    } else {
-      return { checked: false, indeterminate: true };
     }
+
+    if (checkedCount === totalCount && indeterminateCount === 0) {
+      return { checked: true, indeterminate: false };
+    }
+
+    return { checked: false, indeterminate: true };
   }, [dir, getCheckboxState]);
 
+  const createChildWithAncestors = (child: { id: ID; name: string }) => ({
+    ...child,
+    ancestors: dir ? [...dir.ancestors, { id: dir.id, name: dir.name }] : [],
+  });
+
+  const shouldAddToExcluded = (childId: ID) => {
+    const effectiveState = findEffectiveParentState(childId);
+    return effectiveState === "include";
+  };
+
   const handleChildCheckboxChange = (child: { id: ID; name: string }, checked: boolean) => {
-    const childAncestors = dir ? [...dir.ancestors, { id: dir.id, name: dir.name }] : [];
-    const childWithAncestors = { ...child, ancestors: childAncestors };
+    const childWithAncestors = createChildWithAncestors(child);
 
     if (checked) {
       setIncluded((prev) => {
-        const alreadyIncluded = prev.some((item) => item.id === child.id);
-        if (alreadyIncluded) return prev;
+        if (isItemInList(child.id, prev)) return prev;
         return [...prev, childWithAncestors];
       });
       setExcluded((prev) => prev.filter((item) => item.id !== child.id));
     } else {
       setIncluded((prev) => prev.filter((item) => item.id !== child.id));
 
-      const childAncestorPath = [...(dir?.ancestors || []), { id: dir?.id, name: dir?.name || "" }];
-      let shouldAddToExcluded = false;
-
-      for (let i = childAncestorPath.length - 1; i >= 0; i--) {
-        const ancestor = childAncestorPath[i];
-        if (excluded.some((item) => item.id === ancestor.id)) {
-          break;
-        }
-        if (included.some((item) => item.id === ancestor.id)) {
-          shouldAddToExcluded = true;
-          break;
-        }
-      }
-
-      if (shouldAddToExcluded) {
+      if (shouldAddToExcluded(child.id)) {
         setExcluded((prev) => {
-          const alreadyExcluded = prev.some((item) => item.id === child.id);
-          if (alreadyExcluded) return prev;
+          if (isItemInList(child.id, prev)) return prev;
           return [...prev, childWithAncestors];
         });
       }
+    }
+  };
+
+  const removeAllDescendants = (parentId: ID) => {
+    const filterDescendants = (list: SelectedDir[]) =>
+      list.filter((item) => item.id !== parentId && !item.ancestors.some((ancestor) => ancestor.id === parentId));
+
+    setIncluded(filterDescendants);
+    setExcluded(filterDescendants);
+  };
+
+  const toggleAllChildren = (checked: boolean) => {
+    if (!dir) return;
+
+    const updateList = (setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>, otherList: SelectedDir[]) => {
+      setter((prev) => {
+        const updated = [...prev];
+
+        dir.children.forEach((child) => {
+          const alreadyInList = isItemInList(child.id, updated);
+          const inOtherList = isItemInList(child.id, otherList);
+
+          if (!alreadyInList && !inOtherList) {
+            updated.push(createChildWithAncestors(child));
+          }
+        });
+
+        return updated;
+      });
+    };
+
+    const removeChildrenFromList = (setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>) => {
+      setter((prev) => prev.filter((item) => !dir.children.some((child) => child.id === item.id)));
+    };
+
+    if (checked) {
+      updateList(setIncluded, excluded);
+      removeChildrenFromList(setExcluded);
+    } else {
+      updateList(setExcluded, included);
+      removeChildrenFromList(setIncluded);
     }
   };
 
@@ -119,60 +171,13 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
     if (!dir) return;
 
     const parentState = getParentIndeterminateState;
-    const isIntermediate = parentState.indeterminate;
 
-    if (isIntermediate) {
-      const removeDescendants = (id: ID) => {
-        setIncluded((prev) =>
-          prev.filter((item) => {
-            return item.id !== id && !item.ancestors.some((ancestor) => ancestor.id === id);
-          })
-        );
-
-        setExcluded((prev) =>
-          prev.filter((item) => {
-            return item.id !== id && !item.ancestors.some((ancestor) => ancestor.id === id);
-          })
-        );
-      };
-
-      removeDescendants(dir.id);
+    if (parentState.indeterminate) {
+      removeAllDescendants(dir.id);
       return;
     }
 
-    if (checked) {
-      setIncluded((prev) => {
-        const newIncluded = [...prev];
-        dir.children.forEach((child) => {
-          const alreadyIncluded = newIncluded.some((item) => item.id === child.id);
-          const explicitlyExcluded = excluded.some((item) => item.id === child.id);
-
-          if (!alreadyIncluded && !explicitlyExcluded) {
-            const childAncestors = [...dir.ancestors, { id: dir.id, name: dir.name }];
-            const childWithAncestors = { ...child, ancestors: childAncestors };
-            newIncluded.push(childWithAncestors);
-          }
-        });
-        return newIncluded;
-      });
-      setExcluded((prev) => prev.filter((item) => !dir.children.some((child) => child.id === item.id)));
-    } else {
-      setExcluded((prev) => {
-        const newExcluded = [...prev];
-        dir.children.forEach((child) => {
-          const alreadyExcluded = newExcluded.some((item) => item.id === child.id);
-          const explicitlyIncluded = included.some((item) => item.id === child.id);
-
-          if (!alreadyExcluded && !explicitlyIncluded) {
-            const childAncestors = [...dir.ancestors, { id: dir.id, name: dir.name }];
-            const childWithAncestors = { ...child, ancestors: childAncestors };
-            newExcluded.push(childWithAncestors);
-          }
-        });
-        return newExcluded;
-      });
-      setIncluded((prev) => prev.filter((item) => !dir.children.some((child) => child.id === item.id)));
-    }
+    toggleAllChildren(checked);
   };
 
   return {
