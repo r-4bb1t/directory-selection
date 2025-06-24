@@ -24,12 +24,14 @@ export const DirectoryHeader = ({
         }}
         onChange={(e) => onParentCheckboxChange(e.target.checked)}
       />
-      {dir.ancestors.map((ancestor) => (
-        <button key={ancestor.id} className="btn btn-primary btn-soft btn-sm" onClick={() => onNavigate(ancestor.id)}>
-          {ancestor.name}
-        </button>
-      ))}
-      <span className="btn btn-primary btn-dash btn-sm">{dir.name}</span>
+      <div className="flex items-center gap-2 w-full overflow-x-auto shrink">
+        {dir.ancestors.map((ancestor) => (
+          <button key={ancestor.id} className="btn btn-primary btn-soft btn-sm" onClick={() => onNavigate(ancestor.id)}>
+            {ancestor.name}
+          </button>
+        ))}
+        <span className="btn btn-primary btn-dash btn-sm">{dir.name}</span>
+      </div>
     </div>
   );
 };
