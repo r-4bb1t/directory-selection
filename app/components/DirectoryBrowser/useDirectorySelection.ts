@@ -1,68 +1,83 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 
 export const useDirectorySelection = (dir: Dir | undefined) => {
   const [included, setIncluded] = useState<SelectedDir[]>([]);
   const [excluded, setExcluded] = useState<SelectedDir[]>([]);
 
-  const isItemInList = (itemId: ID, list: SelectedDir[]) => list.some((item) => item.id === itemId);
+  const isItemInList = useCallback((itemId: ID, list: SelectedDir[]) => list.some((item) => item.id === itemId), []);
 
-  const hasChildrenInList = (parentId: ID, list: SelectedDir[]) =>
-    list.some((item) => item.ancestors.some((ancestor) => ancestor.id === parentId));
+  const hasChildrenInList = useCallback(
+    (parentId: ID, list: SelectedDir[]) =>
+      list.some((item) => item.ancestors.some((ancestor) => ancestor.id === parentId)),
+    []
+  );
 
-  const getCurrentAncestorPath = () => (dir ? [...(dir.ancestors || []), { id: dir.id, name: dir.name }] : []);
+  const getCurrentAncestorPath = useCallback(
+    () => (dir ? [...(dir.ancestors || []), { id: dir.id, name: dir.name }] : []),
+    [dir]
+  );
 
-  const findEffectiveParentState = (childId: ID): "include" | "exclude" | "none" => {
-    const ancestorPath = getCurrentAncestorPath();
+  const findEffectiveParentState = useCallback(
+    (childId: ID): "include" | "exclude" | "none" => {
+      const ancestorPath = getCurrentAncestorPath();
 
-    for (let i = ancestorPath.length - 1; i >= 0; i--) {
-      const ancestor = ancestorPath[i];
-      if (isItemInList(ancestor.id, excluded)) return "exclude";
-      if (isItemInList(ancestor.id, included)) return "include";
-    }
+      for (let i = ancestorPath.length - 1; i >= 0; i--) {
+        const ancestor = ancestorPath[i];
+        if (isItemInList(ancestor.id, excluded)) return "exclude";
+        if (isItemInList(ancestor.id, included)) return "include";
+      }
 
-    return "none";
-  };
+      return "none";
+    },
+    [getCurrentAncestorPath, isItemInList, excluded, included]
+  );
 
-  const calculateDirectState = (child: { id: ID; name: string }) => {
-    const isIncluded = isItemInList(child.id, included);
-    const isExcluded = isItemInList(child.id, excluded);
-    const hasIncludedChildren = hasChildrenInList(child.id, included);
-    const hasExcludedChildren = hasChildrenInList(child.id, excluded);
+  const calculateDirectState = useCallback(
+    (child: { id: ID; name: string }) => {
+      const isIncluded = isItemInList(child.id, included);
+      const isExcluded = isItemInList(child.id, excluded);
+      const hasIncludedChildren = hasChildrenInList(child.id, included);
+      const hasExcludedChildren = hasChildrenInList(child.id, excluded);
 
-    if (isIncluded) {
-      return {
-        checked: true,
-        indeterminate: hasExcludedChildren,
-      };
-    }
-
-    if (isExcluded) {
-      return { checked: false, indeterminate: false };
-    }
-
-    if (hasIncludedChildren) {
-      return { checked: false, indeterminate: true };
-    }
-
-    return null;
-  };
-
-  const calculateInheritedState = (child: { id: ID; name: string }) => {
-    const effectiveState = findEffectiveParentState(child.id);
-    const hasExcludedChildren = hasChildrenInList(child.id, excluded);
-
-    switch (effectiveState) {
-      case "exclude":
-        return { checked: false, indeterminate: false };
-      case "include":
+      if (isIncluded) {
         return {
           checked: true,
           indeterminate: hasExcludedChildren,
         };
-      default:
+      }
+
+      if (isExcluded) {
         return { checked: false, indeterminate: false };
-    }
-  };
+      }
+
+      if (hasIncludedChildren) {
+        return { checked: false, indeterminate: true };
+      }
+
+      return null;
+    },
+    [isItemInList, hasChildrenInList, included, excluded]
+  );
+
+  const calculateInheritedState = useCallback(
+    (child: { id: ID; name: string }) => {
+      const effectiveState = findEffectiveParentState(child.id);
+      const hasExcludedChildren = hasChildrenInList(child.id, excluded);
+
+      switch (effectiveState) {
+        case "exclude":
+          return { checked: false, indeterminate: false };
+        case "include":
+          return {
+            checked: true,
+            indeterminate: hasExcludedChildren,
+          };
+        default:
+          return { checked: false, indeterminate: false };
+      }
+    },
+    [findEffectiveParentState, hasChildrenInList, excluded]
+  );
 
   const getCheckboxState = useMemo(() => {
     return (child: { id: ID; name: string }) => {
@@ -71,7 +86,7 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
 
       return calculateInheritedState(child);
     };
-  }, [included, excluded, dir]);
+  }, [calculateDirectState, calculateInheritedState]);
 
   const getParentIndeterminateState = useMemo(() => {
     if (!dir?.children?.length) {
@@ -95,90 +110,103 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
     return { checked: false, indeterminate: true };
   }, [dir, getCheckboxState]);
 
-  const createChildWithAncestors = (child: { id: ID; name: string }) => ({
-    ...child,
-    ancestors: dir ? [...dir.ancestors, { id: dir.id, name: dir.name }] : [],
-  });
+  const createChildWithAncestors = useCallback(
+    (child: { id: ID; name: string }) => ({
+      ...child,
+      ancestors: dir ? [...dir.ancestors, { id: dir.id, name: dir.name }] : [],
+    }),
+    [dir]
+  );
 
-  const shouldAddToExcluded = (childId: ID) => {
-    const effectiveState = findEffectiveParentState(childId);
-    return effectiveState === "include";
-  };
+  const shouldAddToExcluded = useCallback(
+    (childId: ID) => {
+      const effectiveState = findEffectiveParentState(childId);
+      return effectiveState === "include";
+    },
+    [findEffectiveParentState]
+  );
 
-  const handleChildCheckboxChange = (child: { id: ID; name: string }, checked: boolean) => {
-    const childWithAncestors = createChildWithAncestors(child);
-
-    if (checked) {
-      setIncluded((prev) => {
-        if (isItemInList(child.id, prev)) return prev;
-        return [...prev, childWithAncestors];
-      });
-      setExcluded((prev) => prev.filter((item) => item.id !== child.id));
-    } else {
-      setIncluded((prev) => prev.filter((item) => item.id !== child.id));
-
-      if (shouldAddToExcluded(child.id)) {
-        setExcluded((prev) => {
-          if (isItemInList(child.id, prev)) return prev;
-          return [...prev, childWithAncestors];
-        });
-      }
-    }
-  };
-
-  const removeAllDescendants = (parentId: ID) => {
+  const removeAllDescendants = useCallback((parentId: ID) => {
     const filterDescendants = (list: SelectedDir[]) =>
       list.filter((item) => item.id !== parentId && !item.ancestors.some((ancestor) => ancestor.id === parentId));
 
     setIncluded(filterDescendants);
     setExcluded(filterDescendants);
-  };
+  }, []);
 
-  const toggleAllChildren = (checked: boolean) => {
-    if (!dir) return;
+  const toggleAllChildren = useCallback(
+    (checked: boolean) => {
+      if (!dir) return;
 
-    const updateList = (setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>, otherList: SelectedDir[]) => {
-      setter((prev) => {
-        const updated = [...prev];
+      const updateList = (setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>, otherList: SelectedDir[]) => {
+        setter((prev) => {
+          const updated = [...prev];
 
-        dir.children.forEach((child) => {
-          const alreadyInList = isItemInList(child.id, updated);
-          const inOtherList = isItemInList(child.id, otherList);
+          dir.children.forEach((child) => {
+            const alreadyInList = isItemInList(child.id, updated);
+            const inOtherList = isItemInList(child.id, otherList);
 
-          if (!alreadyInList && !inOtherList) {
-            updated.push(createChildWithAncestors(child));
-          }
+            if (!alreadyInList && !inOtherList) {
+              updated.push(createChildWithAncestors(child));
+            }
+          });
+
+          return updated;
         });
+      };
 
-        return updated;
-      });
-    };
+      const removeChildrenFromList = (setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>) => {
+        setter((prev) => prev.filter((item) => !dir.children.some((child) => child.id === item.id)));
+      };
 
-    const removeChildrenFromList = (setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>) => {
-      setter((prev) => prev.filter((item) => !dir.children.some((child) => child.id === item.id)));
-    };
+      if (checked) {
+        updateList(setIncluded, excluded);
+        removeChildrenFromList(setExcluded);
+      } else {
+        updateList(setExcluded, included);
+        removeChildrenFromList(setIncluded);
+      }
+    },
+    [dir, isItemInList, createChildWithAncestors, excluded, included]
+  );
 
-    if (checked) {
-      updateList(setIncluded, excluded);
-      removeChildrenFromList(setExcluded);
-    } else {
-      updateList(setExcluded, included);
-      removeChildrenFromList(setIncluded);
-    }
-  };
+  const handleChildCheckboxChange = useCallback(
+    (child: { id: ID; name: string }, checked: boolean) => {
+      const childWithAncestors = createChildWithAncestors(child);
 
-  const handleParentCheckboxChange = (checked: boolean) => {
-    if (!dir) return;
+      if (checked) {
+        setIncluded((prev) => {
+          if (isItemInList(child.id, prev)) return prev;
+          return [...prev, childWithAncestors];
+        });
+        setExcluded((prev) => prev.filter((item) => item.id !== child.id));
+      } else {
+        setIncluded((prev) => prev.filter((item) => item.id !== child.id));
 
-    const parentState = getParentIndeterminateState;
+        if (shouldAddToExcluded(child.id)) {
+          setExcluded((prev) => {
+            if (isItemInList(child.id, prev)) return prev;
+            return [...prev, childWithAncestors];
+          });
+        }
+      }
+    },
+    [createChildWithAncestors, isItemInList, shouldAddToExcluded]
+  );
 
-    if (parentState.indeterminate) {
-      removeAllDescendants(dir.id);
-      return;
-    }
+  const handleParentCheckboxChange = useCallback(
+    (checked: boolean) => {
+      if (!dir) return;
 
-    toggleAllChildren(checked);
-  };
+      if (getParentIndeterminateState.indeterminate) {
+        removeAllDescendants(dir.id);
+        return;
+      }
+
+      toggleAllChildren(checked);
+    },
+    [dir, getParentIndeterminateState, removeAllDescendants, toggleAllChildren]
+  );
 
   return {
     included,
