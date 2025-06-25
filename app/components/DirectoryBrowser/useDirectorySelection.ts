@@ -4,16 +4,23 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
   const [included, setIncluded] = useState<SelectedDir[]>([]);
   const [excluded, setExcluded] = useState<SelectedDir[]>([]);
 
-  const isItemInList = useCallback((itemId: ID, list: SelectedDir[]) => list.some((item) => item.id === itemId), []);
+  const isItemInList = useCallback(
+    (itemId: ID, list: SelectedDir[]) =>
+      list.some((item) => item.id === itemId),
+    []
+  );
 
   const hasChildrenInList = useCallback(
     (parentId: ID, list: SelectedDir[]) =>
-      list.some((item) => item.ancestors.some((ancestor) => ancestor.id === parentId)),
+      list.some((item) =>
+        item.ancestors.some((ancestor) => ancestor.id === parentId)
+      ),
     []
   );
 
   const getCurrentAncestorPath = useCallback(
-    () => (dir ? [...(dir.ancestors || []), { id: dir.id, name: dir.name }] : []),
+    () =>
+      dir ? [...(dir.ancestors || []), { id: dir.id, name: dir.name }] : [],
     [dir]
   );
 
@@ -95,8 +102,12 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
 
     const childStates = dir.children.map((child) => getCheckboxState(child));
 
-    const checkedCount = childStates.filter((state) => state.checked && !state.indeterminate).length;
-    const indeterminateCount = childStates.filter((state) => state.indeterminate).length;
+    const checkedCount = childStates.filter(
+      (state) => state.checked && !state.indeterminate
+    ).length;
+    const indeterminateCount = childStates.filter(
+      (state) => state.indeterminate
+    ).length;
     const totalCount = childStates.length;
 
     if (checkedCount === 0 && indeterminateCount === 0) {
@@ -128,7 +139,11 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
 
   const removeAllDescendants = useCallback((parentId: ID) => {
     const filterDescendants = (list: SelectedDir[]) =>
-      list.filter((item) => item.id !== parentId && !item.ancestors.some((ancestor) => ancestor.id === parentId));
+      list.filter(
+        (item) =>
+          item.id !== parentId &&
+          !item.ancestors.some((ancestor) => ancestor.id === parentId)
+      );
 
     setIncluded(filterDescendants);
     setExcluded(filterDescendants);
@@ -138,7 +153,10 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
     (checked: boolean) => {
       if (!dir) return;
 
-      const updateList = (setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>, otherList: SelectedDir[]) => {
+      const updateList = (
+        setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>,
+        otherList: SelectedDir[]
+      ) => {
         setter((prev) => {
           const updated = [...prev];
 
@@ -155,8 +173,14 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
         });
       };
 
-      const removeChildrenFromList = (setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>) => {
-        setter((prev) => prev.filter((item) => !dir.children.some((child) => child.id === item.id)));
+      const removeChildrenFromList = (
+        setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>
+      ) => {
+        setter((prev) =>
+          prev.filter(
+            (item) => !dir.children.some((child) => child.id === item.id)
+          )
+        );
       };
 
       if (checked) {
@@ -181,7 +205,7 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
         });
         setExcluded((prev) => prev.filter((item) => item.id !== child.id));
       } else {
-        setIncluded((prev) => prev.filter((item) => item.id !== child.id));
+        removeAllDescendants(child.id);
 
         if (shouldAddToExcluded(child.id)) {
           setExcluded((prev) => {
@@ -191,7 +215,12 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
         }
       }
     },
-    [createChildWithAncestors, isItemInList, shouldAddToExcluded]
+    [
+      createChildWithAncestors,
+      isItemInList,
+      shouldAddToExcluded,
+      removeAllDescendants,
+    ]
   );
 
   const handleParentCheckboxChange = useCallback(
