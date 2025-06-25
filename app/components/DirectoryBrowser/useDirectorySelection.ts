@@ -152,62 +152,6 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
     setExcluded(filterDescendants);
   }, []);
 
-  const toggleAllChildren = useCallback(
-    (checked: boolean) => {
-      if (!dir) return;
-
-      const effectiveState = findEffectiveParentState(dir.id);
-
-      const updateList = (
-        setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>,
-        otherList: SelectedDir[]
-      ) => {
-        setter((prev) => {
-          const updated = [...prev];
-
-          dir.children.forEach((child) => {
-            const alreadyInList = isItemInList(child.id, updated);
-            const inOtherList = isItemInList(child.id, otherList);
-
-            if (!alreadyInList && !inOtherList) {
-              updated.push(createChildWithAncestors(child));
-            }
-          });
-
-          return updated;
-        });
-      };
-
-      const removeChildrenFromList = (
-        setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>
-      ) => {
-        setter((prev) =>
-          prev.filter(
-            (item) => !dir.children.some((child) => child.id === item.id)
-          )
-        );
-      };
-
-      if (checked) {
-        if (effectiveState !== "include") {
-          updateList(setIncluded, excluded);
-        }
-        removeChildrenFromList(setExcluded);
-      } else {
-        updateList(setExcluded, included);
-        removeChildrenFromList(setIncluded);
-      }
-    },
-    [
-      dir,
-      isItemInList,
-      createChildWithAncestors,
-      excluded,
-      included,
-      findEffectiveParentState,
-    ]
-  );
-
   const handleChildCheckboxChange = useCallback(
     (child: { id: ID; name: string }, checked: boolean) => {
       const childWithAncestors = createChildWithAncestors(child);
