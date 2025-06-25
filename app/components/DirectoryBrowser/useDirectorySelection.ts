@@ -199,11 +199,18 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
       const childWithAncestors = createChildWithAncestors(child);
 
       if (checked) {
-        setIncluded((prev) => {
-          if (isItemInList(child.id, prev)) return prev;
-          return [...prev, childWithAncestors];
-        });
         setExcluded((prev) => prev.filter((item) => item.id !== child.id));
+
+        const effectiveState = findEffectiveParentState(child.id);
+
+        setIncluded((prev) => {
+          const filtered = prev.filter((item) => item.id !== child.id);
+
+          if (effectiveState !== "include") {
+            return [...filtered, childWithAncestors];
+          }
+          return filtered;
+        });
       } else {
         removeAllDescendants(child.id);
 
@@ -220,6 +227,7 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
       isItemInList,
       shouldAddToExcluded,
       removeAllDescendants,
+      findEffectiveParentState,
     ]
   );
 
@@ -232,9 +240,37 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
         return;
       }
 
-      toggleAllChildren(checked);
+      const parentWithAncestors = {
+        id: dir.id,
+        name: dir.name,
+        ancestors: dir.ancestors,
+      } as SelectedDir;
+
+      if (checked) {
+        removeAllDescendants(dir.id);
+        setIncluded((prev) => {
+          if (isItemInList(dir.id, prev)) return prev;
+          return [...prev, parentWithAncestors];
+        });
+        setExcluded((prev) => prev.filter((item) => item.id !== dir.id));
+      } else {
+        removeAllDescendants(dir.id);
+
+        if (shouldAddToExcluded(dir.id)) {
+          setExcluded((prev) => {
+            if (isItemInList(dir.id, prev)) return prev;
+            return [...prev, parentWithAncestors];
+          });
+        }
+      }
     },
-    [dir, getParentIndeterminateState, removeAllDescendants, toggleAllChildren]
+    [
+      dir,
+      getParentIndeterminateState,
+      removeAllDescendants,
+      isItemInList,
+      shouldAddToExcluded,
+    ]
   );
 
   return {
