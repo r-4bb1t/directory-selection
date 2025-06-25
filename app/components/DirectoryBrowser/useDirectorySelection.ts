@@ -54,7 +54,10 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
       }
 
       if (isExcluded) {
-        return { checked: false, indeterminate: false };
+        return {
+          checked: false,
+          indeterminate: hasIncludedChildren,
+        };
       }
 
       if (hasIncludedChildren) {
@@ -199,6 +202,8 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
       const childWithAncestors = createChildWithAncestors(child);
 
       if (checked) {
+        removeAllDescendants(child.id);
+
         setExcluded((prev) => prev.filter((item) => item.id !== child.id));
 
         const effectiveState = findEffectiveParentState(child.id);
@@ -254,9 +259,11 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
         });
         setExcluded((prev) => prev.filter((item) => item.id !== dir.id));
       } else {
+        const wasIncluded = isItemInList(dir.id, included);
+
         removeAllDescendants(dir.id);
 
-        if (shouldAddToExcluded(dir.id)) {
+        if (!wasIncluded && shouldAddToExcluded(dir.id)) {
           setExcluded((prev) => {
             if (isItemInList(dir.id, prev)) return prev;
             return [...prev, parentWithAncestors];
