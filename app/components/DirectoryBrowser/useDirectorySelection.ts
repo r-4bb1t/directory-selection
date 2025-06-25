@@ -156,6 +156,8 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
     (checked: boolean) => {
       if (!dir) return;
 
+      const effectiveState = findEffectiveParentState(dir.id);
+
       const updateList = (
         setter: React.Dispatch<React.SetStateAction<SelectedDir[]>>,
         otherList: SelectedDir[]
@@ -187,14 +189,23 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
       };
 
       if (checked) {
-        updateList(setIncluded, excluded);
+        if (effectiveState !== "include") {
+          updateList(setIncluded, excluded);
+        }
         removeChildrenFromList(setExcluded);
       } else {
         updateList(setExcluded, included);
         removeChildrenFromList(setIncluded);
       }
     },
-    [dir, isItemInList, createChildWithAncestors, excluded, included]
+    [
+      dir,
+      isItemInList,
+      createChildWithAncestors,
+      excluded,
+      included,
+      findEffectiveParentState,
+    ]
   );
 
   const handleChildCheckboxChange = useCallback(
@@ -253,11 +264,28 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
 
       if (checked) {
         removeAllDescendants(dir.id);
-        setIncluded((prev) => {
-          if (isItemInList(dir.id, prev)) return prev;
-          return [...prev, parentWithAncestors];
-        });
         setExcluded((prev) => prev.filter((item) => item.id !== dir.id));
+
+        const findStateForDir = () => {
+          const ancestorPath = dir.ancestors || [];
+          for (let i = ancestorPath.length - 1; i >= 0; i--) {
+            const ancestor = ancestorPath[i];
+            if (isItemInList(ancestor.id, excluded)) return "exclude";
+            if (isItemInList(ancestor.id, included)) return "include";
+          }
+          return "none";
+        };
+
+        const effectiveState = findStateForDir();
+
+        setIncluded((prev) => {
+          const filtered = prev.filter((item) => item.id !== dir.id);
+
+          if (effectiveState !== "include") {
+            return [...filtered, parentWithAncestors];
+          }
+          return filtered;
+        });
       } else {
         const wasIncluded = isItemInList(dir.id, included);
 
@@ -277,6 +305,7 @@ export const useDirectorySelection = (dir: Dir | undefined) => {
       removeAllDescendants,
       isItemInList,
       shouldAddToExcluded,
+      included,
     ]
   );
 
